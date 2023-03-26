@@ -20,24 +20,36 @@ Once fuel station is found, the agents move as per base implementation.
 <br/>
 
 ## Results
-Ran experiment 10 x 5 = 50 times. 
-
-Environment 1 (50x50 envsize): 
-
-Score: AVERAGE(466.7, 470.8, 475.4, 473.2, 477.5) = **472.72**
-
-Failure to find fuel station: 0 
-
-Environment 2 (80x80 envsize): 
-
-Score: AVERAGE(750.8, 683.2, 755.6, 767.6, 742.1) = **739.86** 
-
-Failure to find fuel station: once in experiment 2  
+Experiment was run for 10 x 5 = 50 times.    
 <br/>
 
+### Environment 1 (50x50 envsize)
+(Base) Score: AVERAGE(473, 482.9, 477.8, 431.5, 421) = 457.24
+
+(Base) Failure to find fuel station: once in expt 4 & 5
+
+(My) Score: AVERAGE(466.7, 470.8, 475.4, 473.2, 477.5) = **472.72**
+
+(My) Failure to find fuel station: 0   
+<br/>
+
+### Environment 2 (80x80 envsize)
+(Base) Score: AVERAGE(688.7, 624.2, 358.3, 636.6, 632) = 587.96
+
+(Base) Failure to find fuel station: 2,6,1,2 times in expt 2,3,4,5 (22% failure)
+
+(My) Score: AVERAGE(750.8, 683.2, 755.6, 767.6, 742.1) = **739.86** 
+
+(My) Failure to find fuel station: once in experiment 2 (2% failure)  
+<br/>
+
+## Limitations
+- Obstacle is overcomed by going around the obstacle, assuming the agent is going in a straight path. OverObstacle potentially does not work well when (1) agent is going around corners, (2) agent meets another obstacle while overcoming an obstacle.   
+<br/>
 
 ## Potential future work
 - Understand why the cases where fuel station is not found happens.
+- Improve overcoming obstacle algorithm to work in edge cases. 
 - Assign closest agent to the empty search region. Currently, the duplicated agent is assigned to the empty region. Potential challenge is the cloest agent's original search region may be empty and hence need to reassign recursively.   
 <br/>
 
