@@ -11,7 +11,6 @@ import sim.engine.Steppable;
 import sim.field.grid.ObjectGrid2D;
 import sim.util.Bag;
 import sim.util.Int2D;
-import sun.font.TrueTypeFont;
 import tileworld.Parameters;
 import tileworld.TWGUI;
 import tileworld.agent.Message;
@@ -40,7 +39,7 @@ public class TWEnvironment extends SimState implements Steppable {
 
     /**
      * grid environment which stores all TWEntities, ObjectGrd is preferred over
-     * SparseGrid. The environment is typically not too sparse and we do not
+     * SparseGrid. The environment is typically not too sparse, and we do not
      * have multiple objects on the same cell.
      */
     private ObjectGrid2D objectGrid;
@@ -75,18 +74,18 @@ public class TWEnvironment extends SimState implements Steppable {
 
         // create object creation distributions (assumed normal for now)
 
-        this.tileCreator = new TWObjectCreator<TWTile>(Parameters.tileMean, Parameters.tileDev,
+        this.tileCreator = new TWObjectCreator<>(Parameters.tileMean, Parameters.tileDev,
                 tiles, this.random, new TWTile(), this);
-        this.holeCreator = new TWObjectCreator<TWHole>(Parameters.holeMean, Parameters.holeDev,
+        this.holeCreator = new TWObjectCreator<>(Parameters.holeMean, Parameters.holeDev,
                 holes, this.random, new TWHole(), this);
-        this.obstacleCreator = new TWObjectCreator<TWObstacle>(Parameters.obstacleMean,
+        this.obstacleCreator = new TWObjectCreator<>(Parameters.obstacleMean,
                 Parameters.obstacleDev, obstacles, this.random, new TWObstacle(), this);
 
         tiles = new Bag();
         holes = new Bag();
         obstacles = new Bag();
         reward = 0;
-        messages = new ArrayList<Message>();
+        messages = new ArrayList<>();
     }
 
     @Override
@@ -105,26 +104,23 @@ public class TWEnvironment extends SimState implements Steppable {
 
         //todo: Now we create some agents
         Int2D pos = this.generateRandomLocation();
-        createAgent(new SimpleTWAgent("agent1", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
-//        createAgent(new SimpleTWAgent("agent1", 26, 26, this, Parameters.defaultFuelLevel));
-        pos = this.generateRandomLocation();
-        createAgent(new SimpleTWAgent("agent2", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
+        createAgent(new SimpleTWAgent("agent1", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel, new Int2D(0, 0)));
 
         pos = this.generateRandomLocation();
-        createAgent(new SimpleTWAgent("agent3", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
-
+        createAgent(new SimpleTWAgent("agent2", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel, new Int2D(Parameters.xDimension / 2, 0)));
+        //
         pos = this.generateRandomLocation();
-        createAgent(new SimpleTWAgent("agent4", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
-
+        createAgent(new SimpleTWAgent("agent3", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel, new Int2D(0, Parameters.yDimension / 2)));
+        //
         pos = this.generateRandomLocation();
-        createAgent(new SimpleTWAgent("agent5", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
+        createAgent(new SimpleTWAgent("agent4", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel, new Int2D(Parameters.xDimension / 2, Parameters.yDimension / 2)));
 
-//        
+        // pos = this.generateRandomLocation();
+        // createAgent(new SimpleTWAgent("agent5", pos.getX(), pos.getY(), this, Parameters.defaultFuelLevel));
+
         //create the fueling station
         pos = this.generateRandomLocation();
         fuelingStation = new TWFuelStation(pos.getX(), pos.getY(), this);
-//        fuelingStation = new TWFuelStation(25, 25, this);
-
 
     }
 
@@ -144,7 +140,7 @@ public class TWEnvironment extends SimState implements Steppable {
 
     /**
      * Horribly inefficient, Context is not ordered so need complete iteration of context to remove items.
-     * This is done every timestep
+     * This is done every time step
      */
     private void removeTWObjects(double timeNow) {
 
@@ -222,15 +218,12 @@ public class TWEnvironment extends SimState implements Steppable {
     }
 
     /**
-     * returns true if the specified location contains a TWEntity.
-     * @param x
-     * @param y
-     * @return
+     * returns true if the specified location contains a TWObstacle.
      */
     public boolean isCellBlocked(int x, int y) {
         if (this.isValidLocation(x, y)) {
             TWEntity e = (TWEntity) objectGrid.get(x, y);
-            return (e != null && (e instanceof TWObstacle));
+            return (e instanceof TWObstacle);
         } else {
             return true;
         }
@@ -238,23 +231,22 @@ public class TWEnvironment extends SimState implements Steppable {
     }
 
     public boolean canPickupTile(TWTile tile, TWAgent agent) {
-        if (!agent.sameLocation(tile))
+        if (!agent.sameLocation(tile)) {
             return false;
+        }
         TWEntity e = (TWEntity) objectGrid.get(tile.x, tile.y);
-        if (e == null || !(e instanceof TWTile))
-            return false;
-        return true;
+        return e instanceof TWTile;
     }
 
-    public boolean canPutdownTile(TWHole hole, TWAgent agent) {
-        if (!agent.hasTile())
+    public boolean canPutDownTile(TWHole hole, TWAgent agent) {
+        if (!agent.hasTile()) {
             return false;
-        if (!agent.sameLocation(hole))
+        }
+        if (!agent.sameLocation(hole)) {
             return false;
+        }
         TWEntity e = (TWEntity) objectGrid.get(hole.x, hole.y);
-        if (e == null || !(e instanceof TWHole))
-            return false;
-        return true;
+        return e instanceof TWHole;
     }
 
     public boolean doesCellContainObject(int x, int y) {
@@ -274,10 +266,6 @@ public class TWEnvironment extends SimState implements Steppable {
 
     /**
      * returns true if b is closer to o than c is.
-     * @param o
-     * @param b
-     * @param c
-     * @return
      */
     public boolean isCloser(TWEntity o, TWEntity b, TWEntity c) {
         return (o.getDistanceTo(b) < o.getDistanceTo(c));
@@ -285,29 +273,22 @@ public class TWEnvironment extends SimState implements Steppable {
 
     /**
      * picks a random location from the environment, used for free walk algorithm.
-     * Bit stupid now, will be very slow when the environment fills up.
-     * @param gx - this will be resulting x coordinate
-     * @param gy
+     * A bit stupid now, will be very slow when the environment fills up.
      */
     public Int2D generateRandomLocation() {
-        int gx = 1, gy = 1;
+        int gx, gy;
         while (!isValidCreationLocation(
                 gx = this.random.nextInt(this.xDimension),
                 gy = this.random.nextInt(this.yDimension))) {
         }
-
         return new Int2D(gx, gy);
     }
 
     /**
      *  Generates a random free location at least minDistance away from x, y
-     *
-     * @param x
-     * @param y
-     * @param minDistance
      */
     public Int2D generateFarRandomLocation(int x, int y, int minDistance) {
-        int gx = 1, gy = 1;
+        int gx, gy;
         while (!isValidCreationLocation(gx = this.random.nextInt(this.xDimension),
                 gy = this.random.nextInt(this.yDimension)) && this.getDistance(x, y, gx, gy) < minDistance) {
         }
@@ -336,42 +317,28 @@ public class TWEnvironment extends SimState implements Steppable {
      * @return True if the location is valid 
      */
     public boolean isValidLocation(int x, int y) {
-
         return (isInBounds(x, y));
-
-
     }
 
     /**
      * Different to is ValidLocation, returns true if the location contains no
      * objects at all
-     *
-     * @param x
-     * @param y
-     * @return
      */
     public boolean isValidCreationLocation(int x, int y) {
-
         return (isInBounds(x, y) && !this.doesCellContainObject(x, y));
-
-
     }
 
     /**
-     * Creates and schedues a TWAgent. Also adds the agent to the portrayal if
+     * Creates and schedules a TWAgent. Also adds the agent to the portrayal if
      * a portrayal exists.
      *
      * Remember smaller ordering means it is executed earlier.
      *
-     *
-     * @param a
      */
     private void createAgent(TWAgent a) {
-        schedule.scheduleRepeating(new Steppable() {
-            public void step(SimState state) {
-                a.sense();
-                a.communicate();
-            }
+        schedule.scheduleRepeating((Steppable) state -> {
+            a.sense();
+            a.communicate();
         }, 2, 1.0);
         schedule.scheduleRepeating(a, 3, 1.0);
         if (TWGUI.instance != null) {

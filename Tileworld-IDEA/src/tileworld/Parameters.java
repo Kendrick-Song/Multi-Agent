@@ -24,8 +24,8 @@ public class Parameters {
     public static final int defaultSensorRange = 3;
 
     // Environment Parameters
-    public static final int xDimension = 80; //size in cells
-    public static final int yDimension = 80;
+    public static final int xDimension = 50; //size in cells
+    public static final int yDimension = 50;
 
     // Object Parameters
     // mean, dev: control the number of objects to be created in every time step (i.e. average object creation rate)

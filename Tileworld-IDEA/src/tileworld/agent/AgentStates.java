@@ -1,5 +1,5 @@
 package tileworld.agent;
 
 public enum AgentStates {
-    REFUEL, EXPLORE;
+    REFUEL, EXPLORE, WARM_UP;
 }

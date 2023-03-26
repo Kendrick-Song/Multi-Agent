@@ -145,7 +145,7 @@ public abstract class TWAgent extends TWEntity implements Steppable {
      * @param hole
      */
     protected final void putTileInHole(TWHole hole) {
-        if (this.getEnvironment().canPutdownTile(hole, this)) {
+        if (this.getEnvironment().canPutDownTile(hole, this)) {
             this.carriedTiles.remove(0); //remove first tile in list
             this.getEnvironment().getObjectGrid().set(hole.getX(), hole.getY(), null);
             this.score++; // increase individual reward

@@ -13,115 +13,128 @@ import tileworld.exceptions.CellBlockedException;
 import tileworld.exceptions.InsufficientFuelException;
 import tileworld.planners.ExploreNode;
 
-import java.util.ArrayList;
-import java.util.Random;
+import java.util.*;
+
 
 /**
- * TWContextBuilder
+ * Base TW Agent
  *
- * @author michaellees
- * Created: Feb 6, 2011
- * <p>
- * Copyright michaellees Expression year is undefined on line 16, column 24 in Templates/Classes/Class.java.
- * <p>
- * <p>
- * Description:
+ * @author Song Jiayao
+ * Created: March 25, 2023
  */
 public class SimpleTWAgent extends TWAgent {
     private final String name;
     private AgentStates state;
     private TWDirection preDir;
     private boolean overObstacle;
-    private final ExploreNode[][] exploreNodes;
-    private int indexOfPath;
-    protected boolean needBroadcast;
 
-    public SimpleTWAgent(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
+    private int curPathIndex;
+    private final ExploreNode[][] explorePath;
+
+    private final int[] xBound;
+    private final int[] yBound;
+
+    private HashMap<String, Integer> broadcastMessages;
+
+    public void addBroadcastMessages(String message) {
+        this.broadcastMessages.put(message, 15);
+    }
+
+    public SimpleTWAgent(String name, int xpos, int ypos,
+                         TWEnvironment env, double fuelLevel, Int2D exploreStartPoint) {
         super(xpos, ypos, env, fuelLevel);
         this.name = name;
-        this.state = AgentStates.EXPLORE;
+        this.state = AgentStates.WARM_UP;
         this.preDir = TWDirection.Z;
         this.overObstacle = false;
-        this.needBroadcast = false;
-        this.indexOfPath = -1;
-        this.exploreNodes = new ExploreNode[2][4];
-        exploreNodes[0][0] = new ExploreNode(3, 3); // top left
-        exploreNodes[0][1] = new ExploreNode(Parameters.xDimension - 4, Parameters.yDimension - 4); // bottom right
-        exploreNodes[0][2] = new ExploreNode(Parameters.xDimension - 4, 3); // top right
-        exploreNodes[0][3] = new ExploreNode(3, Parameters.yDimension - 4); // bottom left
+        this.broadcastMessages = new HashMap<>();
+        this.xBound = new int[]{exploreStartPoint.getX(), exploreStartPoint.getX() + Parameters.xDimension / 2};
+        this.yBound = new int[]{exploreStartPoint.getY(), exploreStartPoint.getY() + Parameters.yDimension / 2};
 
-        exploreNodes[1][0] = new ExploreNode(Parameters.xDimension - 4, Parameters.yDimension / 2); // right middle
-        exploreNodes[1][1] = new ExploreNode(3, Parameters.yDimension / 2); // left middle
-        exploreNodes[1][2] = new ExploreNode(Parameters.xDimension / 2, Parameters.yDimension - 4); // bottom middle
-        exploreNodes[1][3] = new ExploreNode(Parameters.xDimension / 2, 3); // top middle
+        this.curPathIndex = 0;
+        this.explorePath = new ExploreNode[2][4];
+        // X shape path
+        explorePath[0][0] = new ExploreNode(xBound[0] + 3, yBound[0] + 3); // top left
+        explorePath[0][1] = new ExploreNode(xBound[1] - 4, yBound[1] - 4); // bottom right
+        explorePath[0][2] = new ExploreNode(xBound[1] - 4, yBound[0] + 3); // top right
+        explorePath[0][3] = new ExploreNode(xBound[0] + 3, yBound[1] - 4); // bottom left
+
+        // 十 shape path
+        explorePath[1][0] = new ExploreNode(xBound[1] - 4, yBound[1] / 2); // right middle
+        explorePath[1][1] = new ExploreNode(xBound[0] + 3, yBound[1] / 2); // left middle
+        explorePath[1][2] = new ExploreNode(xBound[1] / 2, yBound[1] - 4); // bottom middle
+        explorePath[1][3] = new ExploreNode(xBound[1] / 2, yBound[0] + 3); // top middle
     }
 
     protected TWThought think() {
-        // get the messages
-        ArrayList<Message> messages = this.getEnvironment().getMessages();
-        this.parseMessages(messages);
-
         // print basic info
-        System.out.println(name
-                + "\tScore: " + this.score
-                + "\tState: " + this.state
-                + "\tCoord: (" + this.getX() + ", " + this.getY() + ")"
-                + "\tFuel Level: " + this.getFuelLevel()
-                + "\tFuel station location: " + getFuelStationLoc()
-                + "\tSteps: " + this.getEnvironment().schedule.getSteps());
+        System.out.println("---------------------------------");
+        System.out.println(this.name
+                + "    Score: " + this.score
+                + "    State: " + this.state
+                + "    Coord: (" + this.getX() + ", " + this.getY() + ")"
+                + "    Fuel Level: " + this.getFuelLevel()
+                + "    Fuel station location: " + this.getFuelStationLoc()
+                + "    Steps: " + this.getEnvironment().schedule.getSteps());
 
         TWDirection dir = null;
         ObjectGrid2D objectGrid = this.getMemory().getMemoryGrid();
         TWEntity e = (TWEntity) objectGrid.get(this.getX(), this.getY());
 
         // check whether it can do something, if so, do it.
-        if (hasTile() && isHole(e))
+        if (this.hasTile() && this.isHole(e)) {
             return new TWThought(TWAction.PUTDOWN, null);
-        else if (carriedTiles.size() < 3 && isTile(e))
+        } else if (this.carriedTiles.size() < 3 && this.isTile(e)) {
             return new TWThought(TWAction.PICKUP, null);
-        else if (isFuelStation(e) && state == AgentStates.REFUEL) {
-            state = AgentStates.EXPLORE;
-            System.out.println("INFO: State change: EXPLORE");
+        } else if (this.isFuelStation(e) && this.state == AgentStates.REFUEL) {
+            this.state = AgentStates.WARM_UP;
+            System.out.println("INFO: State change: WARM UP");
             return new TWThought(TWAction.REFUEL, null);
-        } else if (state != AgentStates.REFUEL && needToRefuel()) {
-            state = AgentStates.REFUEL;
+        } else if (this.state != AgentStates.REFUEL && this.needToRefuel()) {
+            this.state = AgentStates.REFUEL;
             System.out.println("INFO: State change: REFUEL");
+        } else if (this.state == AgentStates.WARM_UP
+                && this.getX() < xBound[1] && this.getX() > this.xBound[0]
+                && this.getY() < yBound[1] && this.getY() > this.yBound[0]) {
+            this.state = AgentStates.EXPLORE;
+            System.out.println("INFO: State change: EXPLORE");
         }
 
         // decide whether to explore or to refuel
-        if (state == AgentStates.EXPLORE) {
+        if (this.state == AgentStates.WARM_UP) {
+            dir = this.getDirection(this.getX(), this.getY(), explorePath[0][0].getX(), explorePath[0][0].getY());
+        } else if (this.state == AgentStates.EXPLORE) {
             System.out.println("TRACE: Exploring");
 
-            // find the nearest object o
+            // find the nearest object
             TWHole hole = (TWHole) this.memory.getClosestObjectInMemory(TWHole.class);
             TWTile tile = (TWTile) this.memory.getClosestObjectInMemory(TWTile.class);
             // The priorities are: 1. score  2. tile  3. explore
-            if (hole != null && hasTile()) {
+            if (hole != null && this.isValidCoor(hole.getX(), hole.getY()) && this.hasTile()) {
                 // move to the closest hole
-                dir = getDirection(this.getX(), this.getY(), hole.getX(), hole.getY());
+                dir = this.getDirection(this.getX(), this.getY(), hole.getX(), hole.getY());
                 System.out.println("TRACE: Getting to the HOLE at (" + hole.getX() + ", " + hole.getY() + ")");
-            } else if (tile != null && carriedTiles.size() < 3) {
+            } else if (tile != null && this.isValidCoor(tile.getX(), tile.getY()) && this.carriedTiles.size() < 3) {
                 // move to the closest tile
-                dir = getDirection(this.getX(), this.getY(), tile.getX(), tile.getY());
+                dir = this.getDirection(this.getX(), this.getY(), tile.getX(), tile.getY());
                 System.out.println("TRACE: Getting to the TILE at (" + tile.getX() + ", " + tile.getY() + ")");
-            } else
+            } else {
                 // decide how to explore
-                dir = getExploreDirection();
-            //            dir = getRandomDirection();
-        } else {
+                dir = this.getExploreDirection();
+            }
+        } else if (this.state == AgentStates.REFUEL) {
             // need to refuel
             System.out.println("TRACE: Getting to the fuel station");
-            Int2D loc = getFuelStationLoc();
+            Int2D loc = this.getFuelStationLoc();
             if (loc != null) {
                 // already known where is the Fuel station
-                dir = getDirection(this.getX(), this.getY(), loc.getX(), loc.getY());
+                dir = this.getDirection(this.getX(), this.getY(), loc.getX(), loc.getY());
             } else
                 // don't know the location, try to explore and find
-                dir = getExploreDirection();
-//                dir = getRandomDirection();
+                dir = this.getExploreDirection();
         }
         System.out.println("TRACE: Move " + dir);
-        preDir = dir;
+        this.preDir = dir;
         return new TWThought(TWAction.MOVE, dir);
     }
 
@@ -133,20 +146,19 @@ public class SimpleTWAgent extends TWAgent {
         TWDirection dir = thought.getDirection();
         switch (act) {
             case PUTDOWN:
-                putTileInHole((TWHole) e);
+                this.putTileInHole((TWHole) e);
                 memory.removeObject(e);
                 break;
             case PICKUP:
-                pickUpTile((TWTile) e);
+                this.pickUpTile((TWTile) e);
                 memory.removeObject(e);
                 break;
             case REFUEL:
-                refuel();
+                this.refuel();
                 break;
             case MOVE:
                 try {
-                    move(dir);
-                    memory.removeAgentPercept(this.getX(), this.getY());
+                    this.move(dir);
                 } catch (CellBlockedException ex) {
                     System.out.println("WARN: Cell Blocked");
                 } catch (InsufficientFuelException insufficientFuelException) {
@@ -158,47 +170,32 @@ public class SimpleTWAgent extends TWAgent {
 
     @Override
     public void communicate() {
-        if (needBroadcast) {
-            Int2D coord = this.getFuelStationLoc();
-            String s;
-            if (coord != null) {
-                s = String.format("Fuel Station Coordinates: %d, %d", coord.x, coord.y);
-                Message message = new Message("", "", s);
-                this.getEnvironment().receiveMessage(message);
-                System.out.println(this.name + "\tINFO: Broadcast the Fuel Station Coordinates");
-            } else {
-                s = String.format("Exploring Path: %d", indexOfPath);
-                Message message = new Message("", "", s);
-                this.getEnvironment().receiveMessage(message);
-                System.out.println(this.name + "\tINFO: Broadcast the Exploring Path");
-            }
-            needBroadcast = false;
+        // get the messages
+        ArrayList<Message> messages = this.getEnvironment().getMessages();
+        this.parseMessages(messages);
+
+        // broadcast messages
+        for (Map.Entry<String, Integer> entry : this.broadcastMessages.entrySet()) {
+            Message m = new Message("", "", entry.getKey());
+            System.out.println("TRACE: Broadcast message:" + entry.getKey() + " from " + this.name);
+            this.getEnvironment().receiveMessage(m);
+            this.broadcastMessages.put(entry.getKey(), entry.getValue() - 1);
         }
-    }
 
-    private TWDirection getRandomDirection() {
-
-        TWDirection randomDir = TWDirection.values()[this.getEnvironment().random.nextInt(4)];
-
-        while (randomDir.isOpposite(preDir) || !isValidCor(this.x + randomDir.dx, this.y + randomDir.dy))
-            randomDir = TWDirection.values()[this.getEnvironment().random.nextInt(4)];
-
-        return randomDir;
-
+        // clear broadcastMessages
+        for (Map.Entry<String, Integer> entry : this.broadcastMessages.entrySet()) {
+            if (entry.getValue() == 0) {
+                this.broadcastMessages.remove(entry.getKey());
+            }
+        }
     }
 
     private TWDirection getExploreDirection() {
-        // haven't chosen any path to explore
-        if (indexOfPath == -1) {
-            // need broadcast when it first chooses the path
-            indexOfPath = this.getEnvironment().random.nextInt(2);
-            needBroadcast = true;
-        }
         ExploreNode node = null;
-        for (ExploreNode n : exploreNodes[indexOfPath]) {
-            if (this.x == n.getX() && this.y == n.getY())
+        for (ExploreNode n : explorePath[this.curPathIndex]) {
+            if (this.getX() == n.getX() && this.getY() == n.getY()) {
                 n.setVisited(true);
-
+            }
             if (!n.isVisited()) {
                 node = n;
                 break;
@@ -207,21 +204,21 @@ public class SimpleTWAgent extends TWAgent {
 
         // all nodes in this path are visited
         if (node == null) {
-            indexOfPath = this.getEnvironment().random.nextInt(2);
-            node = exploreNodes[indexOfPath][0];
+            this.curPathIndex = (this.curPathIndex + 1) % 2;
+            node = explorePath[this.curPathIndex][0];
             // init nodes array
-            for (ExploreNode n : exploreNodes[indexOfPath]) {
+            for (ExploreNode n : explorePath[this.curPathIndex]) {
                 n.setVisited(false);
             }
         }
 
-        System.out.println("TRACE: Explore in Path: " + indexOfPath + " to (" + node.getX() + ", " + node.getY() + ")");
-        return getDirection(this.x, this.y, node.getX(), node.getY());
+        System.out.println("TRACE: Explore in Path: " + this.curPathIndex + " to (" + node.getX() + ", " + node.getY() + ")");
+        return getDirection(this.getX(), this.getY(), node.getX(), node.getY());
     }
 
     @Override
     public String getName() {
-        return name;
+        return this.name;
     }
 
     private boolean isHole(TWEntity e) {
@@ -237,7 +234,7 @@ public class SimpleTWAgent extends TWAgent {
     }
 
     private Int2D getFuelStationLoc() {
-        return this.getMemory().getFuelStationLoc();
+        return this.getMemory().getFuelStationCoor();
     }
 
     private boolean needToRefuel() {
@@ -250,8 +247,8 @@ public class SimpleTWAgent extends TWAgent {
     }
 
     private TWDirection getDirection(int sx, int sy, int gx, int gy) {
-        TWDirection xDir = getXDirection(sx, sy, gx, gy);
-        TWDirection yDir = getYDirection(sx, sy, gx, gy);
+        TWDirection xDir = this.getXDirection(sx, sy, gx, gy);
+        TWDirection yDir = this.getYDirection(sx, sy, gx, gy);
 
         if (!overObstacle) {
             if (xDir != null && yDir != null) {
@@ -269,13 +266,13 @@ public class SimpleTWAgent extends TWAgent {
                 // target is directly above/below the source AND there's an obstacle
                 overObstacle = true;
                 System.out.println("INFO: Overing OBSTACLE");
-                return isValidCor(sx + 1, sy) ? TWDirection.E : TWDirection.W;
+                return isValidCoor(sx + 1, sy) ? TWDirection.E : TWDirection.W;
             }
             if (yDir == null && xDir == TWDirection.Z) {
                 // target is on the directly left/right source AND there's an obstacle
                 overObstacle = true;
                 System.out.println("INFO: Overing OBSTACLE");
-                return isValidCor(sx, sy + 1) ? TWDirection.S : TWDirection.N;
+                return isValidCoor(sx, sy + 1) ? TWDirection.S : TWDirection.N;
             }
         } else {
             overObstacle = false;
@@ -292,66 +289,60 @@ public class SimpleTWAgent extends TWAgent {
     }
 
     /**
-     * @param sx
-     * @param sy
-     * @param gx
-     * @param gy
      * @return Null if gy == sy, Z if there's invalid direction
      */
-    private TWDirection getXDirection(int sx, int sy, int gx, int gy) {
-        if (gx == sx)
+    private TWDirection getXDirection(int sx, int sy, int tx, int ty) {
+        if (tx == sx) {
             return null;
-        else if (gx > sx && isValidCor(sx + 1, sy))
+        } else if (tx > sx && this.isValidCoor(sx + 1, sy)) {
             return TWDirection.E;
-        else if (gx < sx && isValidCor(sx - 1, sy))
+        } else if (tx < sx && this.isValidCoor(sx - 1, sy)) {
             return TWDirection.W;
-        else
+        } else {
             return TWDirection.Z;
+        }
     }
 
     /**
-     * @param sx
-     * @param sy
-     * @param gx
-     * @param gy
      * @return Null if gy == sy, Z if there's invalid direction
      */
-    private TWDirection getYDirection(int sx, int sy, int gx, int gy) {
-        if (gy == sy)
+    private TWDirection getYDirection(int sx, int sy, int tx, int ty) {
+        if (ty == sy)
             return null;
-        else if (gy > sy && isValidCor(sx, sy + 1))
+        else if (ty > sy && isValidCoor(sx, sy + 1))
             return TWDirection.S;
-        else if (gy < sy && isValidCor(sx, sy - 1))
+        else if (ty < sy && isValidCoor(sx, sy - 1))
             return TWDirection.N;
         else
             return TWDirection.Z;
     }
 
-    private boolean isValidCor(int x, int y) {
-        return this.getEnvironment().isInBounds(x, y) && !this.memory.isCellBlocked(x, y);
+    private boolean isValidCoor(int x, int y) {
+        return this.isInBounds(x, y) && !this.memory.isCellBlocked(x, y);
+    }
+
+    private boolean isInBounds(int x, int y) {
+        if (this.state == AgentStates.REFUEL || this.state == AgentStates.WARM_UP) {
+            // refuel have to cross over the local bounds
+            return this.getEnvironment().isInBounds(x, y);
+        } else {
+            return !((x < this.xBound[0]) || (this.yBound[1] < 0) || (x >= this.xBound[1] || y >= this.yBound[1]));
+        }
     }
 
     private void parseMessages(ArrayList<Message> messages) {
         for (Message m : messages) {
-            String[] s = m.getMessage().split(": ", 2);
+            String[] s = m.getMessage().split(":", 2);
             String key = s[0];
             String val = s[1];
             switch (key) {
                 case "Fuel Station Coordinates":
-                    int x = Integer.parseInt(val.split(", ")[0]);
-                    int y = Integer.parseInt(val.split(", ")[1]);
-                    this.getMemory().setFuelStationLoc(new Int2D(x, y));
+                    int x = Integer.parseInt(val.split(",")[0]);
+                    int y = Integer.parseInt(val.split(",")[1]);
+                    this.getMemory().setFuelStationCoor(new Int2D(x, y));
                     break;
-                case "Exploring Path":
-                    int index = Integer.parseInt(val);
-                    if (index == this.indexOfPath) {
-                        // If the paths are the same, there is a 50% probability of changing
-                        boolean change = this.getEnvironment().random.nextBoolean(0.5);
-                        if (change) {
-                            this.indexOfPath = (this.indexOfPath + 1) % exploreNodes.length;
-                            System.out.println("INFO: Path change: " + this.indexOfPath);
-                        }
-                    }
+                case "Exploring Area":
+                    // TODO
                     break;
                 default:
                     break;
