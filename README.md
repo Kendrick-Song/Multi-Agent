@@ -37,7 +37,7 @@ Failure to find fuel station: once in experiment 2
 
 
 ## Potential future work
-- Understand there are cases where fuel station is not found.
+- Understand why the cases where fuel station is not found happens.
 - Assign closest agent to the empty search region. Currently, the duplicated agent is assigned to the empty region. Potential challenge is the cloest agent's original search region may be empty and hence need to reassign recursively.   
 <br/>
 
