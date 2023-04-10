@@ -69,7 +69,7 @@ public class TWAgentWorkingMemory {
         this.fuelStationLoc = fuelStationLoc;
     }
 
-    //    private List<TWAgent> neighbouringAgents = new ArrayList<TWAgent>();
+    private List<TWAgent> neighbouringAgents = new ArrayList<TWAgent>();
     private Int2D fuelStationLoc;
 
     public TWAgentWorkingMemory(TWAgent moi, Schedule schedule, int x, int y) {
@@ -135,28 +135,29 @@ public class TWAgentWorkingMemory {
         }
         //       Agents are currently not added to working memory. Depending on how
         //       communication is modelled you might want to do this.
-        //        neighbouringAgents.clear();
-        //        for (int i = 0; i < sensedAgents.size(); i++) {
-        //
-        //
-        //            if (!(sensedAgents.get(i) instanceof TWAgent)) {
-        //                assert false;
-        //            }
-        //            TWAgent a = (TWAgent) sensedAgents.get(i);
-        //            if(a.equals(me)){
-        //                continue;
-        //            }
-        //            neighbouringAgents.add(a);
-        //        }
+        
+        neighbouringAgents.clear();
+           for (int i = 0; i < sensedAgents.size(); i++) {
+        	   		if(sensedAgents.get(i)== null) {
+        	   		    continue;
+        	   		} else if (!(sensedAgents.get(i) instanceof TWAgent)) {
+                        assert false;
+                    }
+                    TWAgent a = (TWAgent) sensedAgents.get(i);
+                    if(a.equals(me)){
+                        continue;
+                 }
+                   neighbouringAgents.add(a);
+               }
     }
 
-    //    public TWAgent getNeighbour(){
-    //        if(neighbouringAgents.isEmpty()){
-    //            return null;
-    //        }else{
-    //            return neighbouringAgents.get(0);
-    //        }
-    //    }
+   public TWAgent getNeighbour(){
+           if(neighbouringAgents.isEmpty()){
+               return null;
+           }else{
+              return neighbouringAgents.get(0);
+           }
+       }
 
     /**
      * removes all facts earlier than now - max memory time.

@@ -6,6 +6,7 @@
 package tileworld.agent;
 
 import sim.field.grid.ObjectGrid2D;
+import java.util.Random;
 import sim.util.Int2D;
 import tileworld.Parameters;
 import tileworld.environment.*;
@@ -40,12 +41,16 @@ public class SimpleTWAgent extends TWAgent {
     private boolean overObstacle;
     private final ExploreNode[][] exploreNodes;
     private int indexOfPath;
+    private int indexOfPosition;
     protected boolean needBroadcast;
 	private ArrayList<Integer> exploreRegionCoord;
 	private ArrayList<TWDirection> searchPath;
 	private ExploreRegion exploreRegionName;
 	private ExploreRegion[] agentsExploreList;
 	private boolean exploringAgent;
+	private double distanceToNearestAgent;
+	private ArrayList<ExploreNode> notExploredNode;
+	private ArrayList<Integer> distance;
 
     public SimpleTWAgent(String name, int xpos, int ypos, TWEnvironment env, double fuelLevel) {
         super(xpos, ypos, env, fuelLevel);
@@ -59,6 +64,11 @@ public class SimpleTWAgent extends TWAgent {
         this.exploreRegionName = ExploreRegion.CENTER;
         this.agentsExploreList = new ExploreRegion[5];
         this.exploringAgent = false; // if true, agent does not participate in initial fuel station search
+        this.distanceToNearestAgent= 100;
+        this.indexOfPosition =0;
+        this.notExploredNode= new ArrayList<ExploreNode>();
+        this.distance= new ArrayList<Integer>();
+       
 
         
         // first dimension represents an explore path
@@ -126,12 +136,33 @@ public class SimpleTWAgent extends TWAgent {
         TWDirection dir = null;
         ObjectGrid2D objectGrid = this.getMemory().getMemoryGrid();
         TWEntity e = (TWEntity) objectGrid.get(this.getX(), this.getY());
+        
+        TWAgent neighboueAgent = this.getNeighbour();
+        if (neighboueAgent != null) {
+        distanceToNearestAgent = neighboueAgent.getDistanceTo(this.getX(), this.getY());
+        System.out.println("nearest agent to me \t "+ neighboueAgent.getName()+ "Manhattan distance is"+ distanceToNearestAgent);
+        
+        if (distanceToNearestAgent < 7) {
+        	 if ( state == AgentStates.EXPLORE) {
+        		 System.out.println("INFO: State change: AVOID_OVERLAP\t" + neighboueAgent.getName());
+        		 state = AgentStates.AVOID_OVERLAP;
+        	 }
+        }	else if( state == AgentStates.AVOID_OVERLAP){
+        	state = AgentStates.EXPLORE;
+        	 System.out.println("INFO: State change: EXPLORE");
+        }		        	
+        } else {
+        	if( state == AgentStates.AVOID_OVERLAP){
+            	state = AgentStates.EXPLORE;
+            	 System.out.println("INFO: State change: EXPLORE");
+            }
+        }
 
 
         /* follow searchPath under 3 conditions
         1. fuel station yet found
         2. searchPath is still valid (not out of bound)
-        3. not the exploringAgent (one agent is selected as exploring agent since there's 5 agents and 4 regions)
+        3. not the exploringAgent ·	·(one agent is selected as exploring agent since there's 5 agents and 4 regions)
         */
     	if ((getFuelStationLoc() == null) && (this.searchPath.size() > 0) && (this.exploringAgent == false)) {
     		dir = getSearchDirection();
@@ -146,9 +177,16 @@ public class SimpleTWAgent extends TWAgent {
         else if (carriedTiles.size() < 3 && isTile(e))
             return new TWThought(TWAction.PICKUP, null);
         else if (isFuelStation(e) && state == AgentStates.REFUEL) {
-            state = AgentStates.EXPLORE;
-            System.out.println("INFO: State change: EXPLORE");
-            return new TWThought(TWAction.REFUEL, null);
+        	if (neighboueAgent != null && distanceToNearestAgent < 7) {
+        		 state = AgentStates.AVOID_OVERLAP;
+                 System.out.println("INFO: State change: AVOID_OVERLAP\t" + neighboueAgent.getName());
+                 return new TWThought(TWAction.REFUEL, null);
+        	} else {
+        		 state = AgentStates.EXPLORE;
+                 System.out.println("INFO: State change: EXPLORE");
+                 return new TWThought(TWAction.REFUEL, null);
+        	}
+           
         } 
         else if (state != AgentStates.REFUEL && needToRefuel()) {
             state = AgentStates.REFUEL;
@@ -176,7 +214,7 @@ public class SimpleTWAgent extends TWAgent {
                 // decide how to explore
                 dir = getExploreDirection();
             //            dir = getRandomDirection();
-        } else {
+        } else if (state == AgentStates.REFUEL) {
             // need to refuel
             System.out.println("TRACE: Getting to the fuel station");
             Int2D loc = getFuelStationLoc();
@@ -187,6 +225,33 @@ public class SimpleTWAgent extends TWAgent {
                 // don't know the location, try to explore and find
                 dir = getExploreDirection();
 //                dir = getRandomDirection();
+        } else if (state == AgentStates.AVOID_OVERLAP) {
+        	   System.out.println("TRACE: AVOID_OVERLAP");
+        	   System.out.println("TRACE: Exploring");
+
+               // find the nearest object o
+               TWHole hole = (TWHole) this.memory.getClosestObjectInMemory(TWHole.class);
+               TWTile tile = (TWTile) this.memory.getClosestObjectInMemory(TWTile.class);
+               // The priorities are: 1. score  2. tile  3. explore
+               if (hole != null && hasTile()) {
+                   // move to the closest hole
+                   dir = getDirection(this.getX(), this.getY(), hole.getX(), hole.getY());
+                   System.out.println("TRACE: Getting to the HOLE at (" + hole.getX() + ", " + hole.getY() + ")");
+               } else if (tile != null && carriedTiles.size() < 3) {
+                   // move to the closest tile
+                   dir = getDirection(this.getX(), this.getY(), tile.getX(), tile.getY());
+                   System.out.println("TRACE: Getting to the TILE at (" + tile.getX() + ", " + tile.getY() + ")");
+               } else
+                   // decide how to explore
+            	   if (neighboueAgent != null) {
+            		   
+            		   dir = getAvoidOverlapDirection(this.getX(),this.getY(),neighboueAgent.getX(),neighboueAgent.getY(),neighboueAgent.getName(),this.indexOfPath);
+            	   }
+            		   
+                   
+               //            dir = getRandomDirection();
+        	
+        	
         }
         System.out.println("TRACE: Move " + dir);
         preDir = dir;
@@ -228,7 +293,16 @@ public class SimpleTWAgent extends TWAgent {
     public void communicate() {
         if (needBroadcast) {
             Int2D coord = this.getFuelStationLoc();
+            TWAgent neighboueAgent = this.getNeighbour();
             String s;
+            if (neighboueAgent != null) {
+	            s = String.format("Nearest agent to me: %s, %d", neighboueAgent.getName(), indexOfPath);
+	            Message message = new Message(this.getName(),neighboueAgent.getName(), s);
+	            this.getEnvironment().receiveMessage(message);
+	            System.out.println("Nearest agent to me : %s, %d"+ neighboueAgent.getName()+ indexOfPath);
+            }
+            
+          
             if (coord != null) {
                 s = String.format("Fuel Station Coordinates: %d, %d", coord.x, coord.y);
                 Message message = new Message("", "", s);
@@ -267,6 +341,7 @@ public class SimpleTWAgent extends TWAgent {
     }
 
     private TWDirection getExploreDirection() {
+    	
         // haven't chosen any path to explore
         if (indexOfPath == -1) {
             // need broadcast when it first chooses the path
@@ -279,22 +354,109 @@ public class SimpleTWAgent extends TWAgent {
                 n.setVisited(true);
 
             if (!n.isVisited()) {
-                node = n;
-                break;
+            	// notExploredNode.add(n);
+               node =n;
+                // break;
             }
+            
         }
+        if (notExploredNode.size()>0) {
+        	 Random rand = new Random();
+             int randomIndex = rand.nextInt(notExploredNode.size());
 
+             // Retrieve the element at the random index
+            //  node = notExploredNode.get(randomIndex);
+             notExploredNode.clear();
+        }
+       
         // all nodes in this path are visited
         if (node == null) {
             indexOfPath = this.getEnvironment().random.nextInt(2);
+            indexOfPosition = this.getEnvironment().random.nextInt(4);
+            
             node = exploreNodes[indexOfPath][0];
             // init nodes array
             for (ExploreNode n : exploreNodes[indexOfPath]) {
                 n.setVisited(false);
             }
         }
+        
 
-        System.out.println("TRACE: Explore in Path: " + indexOfPath + " to (" + node.getX() + ", " + node.getY() + ")");
+        System.out.println("TRACE: Explore in Path: " + indexOfPath +","+ indexOfPosition+" to (" + node.getX() + ", " + node.getY() + ")");
+        return getDirection(this.x, this.y, node.getX(), node.getY());
+    }
+    
+private TWDirection getAvoidOverlapDirection(int tAgentX, int tAgentY,int nAgentX, int nAgentY, String nAgentName, int indexOfPath_passin ) {
+    	
+    
+            // need broadcast when it first chooses the path
+            // indexOfPath = this.getEnvironment().random.nextInt(2); //returns 0 or 1
+        needBroadcast = true;
+       
+        ExploreNode node = null;
+        for (ExploreNode n : exploreNodes[indexOfPath_passin]) {
+            if (this.x == n.getX() && this.y == n.getY())
+                n.setVisited(true);
+
+            if (!n.isVisited()) {
+            	notExploredNode.add(n);
+            	distance.add((Math.abs(nAgentY-n.getY())+Math.abs(nAgentX-n.getX())));
+
+            }
+            
+        }
+        if (notExploredNode.size()>0 && distance.size()>0) {
+        	 
+             int max = Integer.MIN_VALUE;
+             int maxindex = -1;
+             for (int i = 0; i < distance.size(); i++) {
+                 if (distance.get(i) > max) {
+                     max = distance.get(i);
+                     maxindex = i;
+              }
+             }
+
+             // Retrieve the element at the random index
+             node = notExploredNode.get(maxindex);
+             notExploredNode.clear();
+             distance.clear();
+        }
+       
+        // all nodes in this path are visited
+        if (node == null) {
+            indexOfPath = this.getEnvironment().random.nextInt(2);
+            indexOfPosition = this.getEnvironment().random.nextInt(4);
+            
+           //  node = exploreNodes[indexOfPath_passin][0];
+            // init nodes array
+            for (ExploreNode n : exploreNodes[indexOfPath_passin]) {
+            	notExploredNode.add(n);
+            	distance.add((Math.abs(nAgentY-n.getY())+Math.abs(nAgentX-n.getX())));
+                n.setVisited(false);
+            }
+            
+            if (notExploredNode.size()>0 && distance.size()>0) {
+           	 
+                int max = Integer.MIN_VALUE;
+                int maxindex = -1;
+                for (int i = 0; i < distance.size(); i++) {
+                    if (distance.get(i) > max) {
+                        max = distance.get(i);
+                        maxindex = i;
+                 }
+                }
+
+                // Retrieve the element at the random index
+                node = notExploredNode.get(maxindex);
+                notExploredNode.clear();
+                distance.clear();
+           } else {
+        	   node = exploreNodes[indexOfPath][0];
+           }
+        }
+        
+
+        System.out.println("TRACE: Explore in Path: " + indexOfPath +","+ indexOfPosition+" to (" + node.getX() + ", " + node.getY() + ")");
         return getDirection(this.x, this.y, node.getX(), node.getY());
     }
 
@@ -317,6 +479,10 @@ public class SimpleTWAgent extends TWAgent {
 
     private Int2D getFuelStationLoc() {
         return this.getMemory().getFuelStationLoc();
+    }
+    
+    private TWAgent getNeighbour() {
+        return this.getMemory().getNeighbour();
     }
 
     private boolean needToRefuel() {
@@ -426,7 +592,7 @@ public class SimpleTWAgent extends TWAgent {
                     int index = Integer.parseInt(val);
                     if (index == this.indexOfPath) {
                         // If the paths are the same, there is a 50% probability of changing
-                        boolean change = this.getEnvironment().random.nextBoolean(0.5);
+                        boolean change = this.getEnvironment().random.nextBoolean(0.1);
                         if (change) {
                             this.indexOfPath = (this.indexOfPath + 1) % exploreNodes.length;
                             System.out.println("INFO: Path change: " + this.indexOfPath);
@@ -459,8 +625,24 @@ public class SimpleTWAgent extends TWAgent {
             		break;
                 	}
 
-                	
                 	break; 
+                case "Nearest agent to me":
+                	String fromAgent;
+                	String toAgent;
+                	int indexofPathNAgent;
+                	fromAgent = m.getFrom();
+                	toAgent = m.getTo();
+                	
+                	System.out.println( " receives agent avoid route message from " + fromAgent + "to" + toAgent);
+                	indexofPathNAgent = Integer.parseInt(val.split(", ")[1]);
+                	System.out.println( " Suggest agent to avoid index of route " + indexofPathNAgent );
+                	if (indexofPathNAgent == this.indexOfPath && toAgent == this.name) {
+                        // If the paths are the same, there is a 50% probability of changing
+                        this.indexOfPath = (this.indexOfPath + 1) % exploreNodes.length;
+                        System.out.println("INFO: Path change: " + this.indexOfPath); 
+                    }
+
+                	break;
                 default:
                     break;
             }
@@ -807,7 +989,7 @@ public class SimpleTWAgent extends TWAgent {
     			}
     			agentReallocate.remove(0);
     		}
-    		
+    	 
     	}
     	return new ArrayList<Integer>(Arrays.asList(0, 0, 0, 0));
 	}

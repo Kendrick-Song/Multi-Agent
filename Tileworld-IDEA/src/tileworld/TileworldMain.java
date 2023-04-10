@@ -36,7 +36,7 @@ public class TileworldMain {
 
 			long steps = 0;
 
-			while (steps < Parameters.endTime) {
+			while (steps < Parameters2.endTime) {
 				if (!tw.schedule.step(tw)) {
 					break;
 				}
