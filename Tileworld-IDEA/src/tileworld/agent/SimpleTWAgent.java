@@ -388,7 +388,9 @@ public class SimpleTWAgent extends TWAgent {
     
 private TWDirection getAvoidOverlapDirection(int tAgentX, int tAgentY,int nAgentX, int nAgentY, String nAgentName, int indexOfPath_passin ) {
     	
-    
+    	if (indexOfPath_passin ==-1) {
+    		indexOfPath_passin=0;
+    	}
             // need broadcast when it first chooses the path
             // indexOfPath = this.getEnvironment().random.nextInt(2); //returns 0 or 1
         needBroadcast = true;
@@ -592,7 +594,7 @@ private TWDirection getAvoidOverlapDirection(int tAgentX, int tAgentY,int nAgent
                     int index = Integer.parseInt(val);
                     if (index == this.indexOfPath) {
                         // If the paths are the same, there is a 50% probability of changing
-                        boolean change = this.getEnvironment().random.nextBoolean(0.1);
+                        boolean change = this.getEnvironment().random.nextBoolean(0);
                         if (change) {
                             this.indexOfPath = (this.indexOfPath + 1) % exploreNodes.length;
                             System.out.println("INFO: Path change: " + this.indexOfPath);
